@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template
 import openai
 import json
 import yfinance as yf
+import os
 import datetime
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')
@@ -9,8 +10,12 @@ openai.api_key = os.environ.get('OPENAI_API_KEY')
 app = Flask(__name__)
 
 def get_stockinfo(stock_code_all, start_date="2023-01-01", end_date=str(datetime.date.today())):
-    if start_date >= end_date:
+    if start_date > end_date:
         return None
+    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+    end_date = end_date + datetime.timedelta(days=1) #结束日期延后一天
+    end_date = end_date.strftime('%Y-%m-%d')
+    
     stock_code_all = stock_code_all.split(",")
     stocklist = {}
     for stock_code in stock_code_all:
