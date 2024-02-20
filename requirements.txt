@@ -1,3 +1,4 @@
 flask
+openai
 pandas==1.5.3
-yfinance
+yfinance==0.2.31
