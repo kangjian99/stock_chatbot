@@ -8,7 +8,7 @@
     <style>
       .container {
         max-width: 650px; /* Limit the width of the container */
-        padding-top: 150px; /* Add some padding to the top of the container */
+        padding-top: 50px; /* Add some padding to the top of the container */
       }
       .text-center {
         text-align: center; /* Center align the text */
@@ -21,7 +21,7 @@
     <h1 class="text-center my-4">Stock Chatbot</h1>
     <form id="question-form">
       <div class="form-group">
-        <label for="question">Your question:</label>
+        <label for="question">Your question:（举例：招商银行过去半年表现如何，评价英伟达和特斯拉2022年的股价走势）</label>
         <input type="text" class="form-control" id="question" name="question" placeholder="如果不指定时间段，默认为2023年初至今">
       </div>
       <div class="text-center">  <!-- Wrap the button with a div with class .text-center -->
@@ -32,23 +32,49 @@
   </div>
 
   <script>
-    $("#question-form").submit(function(event){
-      event.preventDefault();
-      var question = $("#question").val();
-      $("#response").text("Thinking...");  // Show a loading message
-      $.ajax({
-        url: '/chat',
-        type: 'post',
-        contentType: 'application/json',
-        data: JSON.stringify({"question": question}),
-        success: function(data) {
-          $("#response").text(data.response); // Use .text() instead of .html()
-    },
-        error: function(jqXHR, textStatus, errorThrown) {
-          $("#response").text('An error occurred...'); // Handle errors
-    }
-      });
+$("#question-form").submit(function(event){
+    event.preventDefault();
+    var question = $("#question").val();
+    $("#response").text("Thinking...");  // Show a loading message
+
+    var content = '';
+
+    fetch('/chat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({"question": question})
+    })
+    .then(response => {
+        let reader = response.body.getReader();
+        let decoder = new TextDecoder();
+        reader.read().then(function processText({ done, value }) {
+            if (done) return;
+            content += decoder.decode(value);
+
+            // Check if the content can be parsed as a complete JSON object
+            let lastOpenBracket = content.lastIndexOf('{');
+            let lastCloseBracket = content.lastIndexOf('}');
+            if (lastCloseBracket > lastOpenBracket) {
+                let latestJson = content.slice(lastOpenBracket, lastCloseBracket + 1);
+                let jsonResponse;
+                try {
+                    jsonResponse = JSON.parse(latestJson);
+                    $("#response").text(jsonResponse.content);
+                } catch (error) {
+                    // If it fails to parse, ignore and wait for the next chunk
+                }
+            }
+
+            return reader.read().then(processText);
+        });
+    })
+    .catch(error => {
+        $("#response").text('An error occurred...'); // Handle errors
     });
+});
+
   </script>
 </body>
 </html>
