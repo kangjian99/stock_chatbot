@@ -15,7 +15,7 @@ client = OpenAI(
 
 app = Flask(__name__)
 
-def get_stockinfo(stock_code_all, start_date="2023-01-01", end_date=str(datetime.date.today())):
+def get_stockinfo(stock_code_all, start_date="2023-07-01", end_date=str(datetime.date.today())):
     if start_date > end_date:
         return None
     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
