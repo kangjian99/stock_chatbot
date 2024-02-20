@@ -1,11 +1,15 @@
-from flask import Flask, request, jsonify, render_template
-import openai
-import json
+from flask import Flask, request, jsonify, render_template, Response
+from openai import OpenAI
+import json, os, datetime
 import yfinance as yf
-import os
-import datetime
 
-openai.api_key = os.environ.get('OPENAI_API_KEY')
+API_KEY = os.getenv("OPENAI_API_KEY")
+model = "gpt-3.5-turbo-0125"
+model4 = "gpt-4-0125-preview"
+
+client = OpenAI(
+  api_key = API_KEY, 
+)
 
 app = Flask(__name__)
 
@@ -15,7 +19,7 @@ def get_stockinfo(stock_code_all, start_date="2023-01-01", end_date=str(datetime
     end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
     end_date = end_date + datetime.timedelta(days=1) #结束日期延后一天
     end_date = end_date.strftime('%Y-%m-%d')
-    
+
     stock_code_all = stock_code_all.split(",")
     stocklist = {}
     for stock_code in stock_code_all:
@@ -31,11 +35,9 @@ def get_stockinfo(stock_code_all, start_date="2023-01-01", end_date=str(datetime
         df = ticker.history(start=start_date, end=end_date)
         if len(df) == 0:
             return None
-        stock_info = ticker.info
-        #for key, value in stock_info.items():
-        #    print(f"{key}: {value}")
-        longname = stock_info["longName"]
-        current_price = stock_info["currentPrice"]
+        #stock_info = ticker.info
+        #longname = stock_info["longName"]
+        #current_price = stock_info["currentPrice"]
         stockinfo[stock_code] = df['Close'].round(2).tolist()
         stocklist.update(stockinfo)
     print(stocklist)
@@ -43,15 +45,17 @@ def get_stockinfo(stock_code_all, start_date="2023-01-01", end_date=str(datetime
 
 # Step 1, send model the user query and what functions it has access to
 def run_conversation(question):
+    if '股价' not in question:
+        question += '(股价)' # 防止response发散
     current_date = datetime.date.today()
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-0613",
+    response = client.chat.completions.create(
+        model=model,
         messages=[{"role": "user", "content": question}],
         temperature=0,
         functions=[
             {
                 "name": "get_stockinfo",
-                "description": f"今天的日期是{current_date}，根据用户输入的stock code和起止时间，获取股票价格信息",
+                "description": f"今天的日期是{current_date}，根据用户输入的信息提取所有的stock code以及起止时间，获取对应时间段的股票价格信息",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -75,33 +79,34 @@ def run_conversation(question):
         function_call="auto",
     )
     
-    print(f"{response['usage']}\n{response['choices'][0]['message']}")
-    message = response['choices'][0]['message']
-    arguments = json.loads(message["function_call"]["arguments"])
+    print(f"第一次调用：{response.usage}\n{response.choices[0].message}")
+    message = response.choices[0].message
+    arguments = json.loads(message.function_call.arguments)
 
     # Step 2, check if the model wants to call a function
-    if message.get("function_call"):
-        function_name = message["function_call"]["name"]
+    if message.function_call:
+        function_name = message.function_call.name
         function = globals()[function_name]
         # Step 3, call the function
         # Note: the JSON response from the model may not be valid JSON
         function_response = function(*arguments.values())
 
         # Step 4, send model the info on the function call and function response
-        second_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-0613",
+        second_response = client.chat.completions.create(
+            model=model,
+            stream=True,
             messages=[
                 {"role": "user", "content": question}, # 第一 user
                 message, # 第二 assistant call什么函数，参数是什么
                 {
                     "role": "function", # 第三 function
                     "name": function_name,
-                    "content": "起止时间内的每日股票价格：" + str(function_response) + "\n不要评价起止时间之外的数据，不要列出所有股价，除非用户要求", # 函数返回
+                    "content": "起止时间内的每日股票价格：" + str(function_response) + "\n你是一位资深分析师，擅长分析股价数据并从中得出结论，列出至少三条分析结论，并给用户具体的投资建议。不要只用几句话应付用户，不要评价起止时间之外的数据，无需列出所有股价除非用户要求", # 函数返回
                 },
             ],
         )
-        print(f"{second_response['usage']}\n")
-        return second_response["choices"][0]["message"]['content']
+        # print(f"第二次调用：{second_response.usage}\n")
+        return second_response
 
 @app.route('/', methods=['GET'])
 def index():
@@ -111,8 +116,21 @@ def index():
 def chatbot():
     data = request.get_json()
     question = data['question']
-    response = run_conversation(question)
-    return jsonify({'response': response})
+    def generate(question):
+        response = run_conversation(question)
+        partial_words = ""
+        for chunk in response:
+            if chunk:
+                try:
+                    if chunk.choices[0].delta:
+                       finish_reason = chunk.choices[0].finish_reason
+                       if finish_reason == "stop":
+                           break
+                       if chunk.choices[0].delta.content:
+                           partial_words += chunk.choices[0].delta.content
+                           yield json.dumps({'content': partial_words}).encode('utf-8')
+                except json.JSONDecodeError:
+                    pass
+        # yield jsonify({'content': partial_words})  # 保证最后一个部分被返回
 
-if __name__ == '__main__':
-    app.run(debug=True)
+    return Response(generate(question), mimetype='application/json')
