@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, render_template, Response
 from openai import OpenAI
 import json, os, datetime
 import yfinance as yf
+#from dotenv import load_dotenv
+#load_dotenv()
 
 API_KEY = os.getenv("OPENAI_API_KEY")
 model = "gpt-3.5-turbo-0125"
@@ -55,7 +57,7 @@ def run_conversation(question):
         functions=[
             {
                 "name": "get_stockinfo",
-                "description": f"今天的日期是{current_date}，根据用户输入的信息提取所有的stock code以及起止时间，获取对应时间段的股票价格信息",
+                "description": f"今天的日期是{current_date}，你的任务是根据用户输入的信息提取所有的stock code以及起止时间(如果起止时间未提供也不要询问用户)，并获取对应时间段的股票价格信息",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -101,7 +103,7 @@ def run_conversation(question):
                 {
                     "role": "function", # 第三 function
                     "name": function_name,
-                    "content": "起止时间内的每日股票价格：" + str(function_response) + "\n你是一位资深分析师，擅长分析股价数据并从中得出结论，列出至少三条分析结论，并给用户具体的投资建议。不要只用几句话应付用户，不要评价起止时间之外的数据，无需列出所有股价除非用户要求", # 函数返回
+                    "content": "起止时间内的每日股票价格：" + str(function_response) + "\n你是一位资深分析师，擅长分析股价数据并从中得出结论，列出代表性的股价信息，列出至少三条分析结论，并给用户具体的投资建议。不要只用几句话应付用户，不要评价起止时间之外的数据，无需列出所有股价除非用户要求", # 函数返回
                 },
             ],
         )
@@ -134,3 +136,6 @@ def chatbot():
         # yield jsonify({'content': partial_words})  # 保证最后一个部分被返回
 
     return Response(generate(question), mimetype='application/json')
+
+if __name__ == '__main__':
+    app.run(debug=True)
