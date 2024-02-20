@@ -37,6 +37,7 @@ def get_stockinfo(stock_code_all, start_date="2023-07-01", end_date=str(datetime
         df = ticker.history(start=start_date, end=end_date)
         if len(df) == 0:
             return None
+        #print(ticker.history().iloc[-1,0])
         #stock_info = ticker.info
         #longname = stock_info["longName"]
         #current_price = stock_info["currentPrice"]
@@ -57,7 +58,13 @@ def run_conversation(question):
         functions=[
             {
                 "name": "get_stockinfo",
-                "description": f"今天的日期是{current_date}，你的任务是根据用户输入的信息提取所有的stock code以及起止时间(如果起止时间未提供也不要询问用户)，并获取对应时间段的股票价格信息",
+                "description": f"""
+                    今天的日期是{current_date}，用户输入信息中必然含有上市股票名称，
+                    你的任务是：
+                    1. 提取用户输入信息中所有提及的stock code，必须将股票名称转化为code
+                    2. 提取起止时间(如果起止时间未提供也不要询问用户)
+                    3. 获取对应时间段的股票价格信息
+                    """,
                 "parameters": {
                     "type": "object",
                     "properties": {
